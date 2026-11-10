@@ -1,0 +1,32 @@
+name: Publish WardenCore server status
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '3-58/5 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: warden-public-status
+  cancel-in-progress: false
+jobs:
+  status:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      # No checkout or third-party actions run with access to the server secrets.
+      # Retrieve just the reviewed publisher at this workflow's exact commit.
+      - name: Fetch reviewed publisher
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          gh api "repos/$SOURCE_REPO/contents/.github/scripts/publish-status.cjs?ref=$SOURCE_SHA" --jq '.content' | base64 --decode > "$RUNNER_TEMP/publish-status.cjs"
+          test -s "$RUNNER_TEMP/publish-status.cjs"
+      - name: Collect and publish only the signed count
+        env:
+          WARDEN_API_KEY: ${{ secrets.WARDEN_API_KEY }}
+          STATUS_SIGNING_KEY: ${{ secrets.STATUS_SIGNING_KEY }}
+          STATUS_SERVER: '185.135.83.35:7002'
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/publish-status.cjs"
