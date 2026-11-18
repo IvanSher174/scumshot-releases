@@ -1,5 +1,5 @@
 'use strict';
-// Runs on GitHub, never in the distributed launcher. Only an allowlisted summary
+// Runs on a trusted publisher host, never in the launcher. Only an allowlisted summary
 // is published. No API responses, player lists, tokens or private keys are logged.
 const crypto=require('node:crypto');
 async function limitedJSON(response,limit=1024*1024){

@@ -1,0 +1,17 @@
+[Unit]
+Description=Publish signed SCUMshot server status
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+EnvironmentFile=/etc/scumshot-status.env
+ExecStart=/usr/bin/node /opt/scumshot-status/publish-status.cjs
+TimeoutStartSec=180
+TimeoutStopSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+UMask=0077
