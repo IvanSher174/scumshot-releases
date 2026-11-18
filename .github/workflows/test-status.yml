@@ -25,4 +25,9 @@ jobs:
           fi
           test -x /usr/bin/node
           systemd-analyze verify deploy/scumshot-status.service deploy/scumshot-status.timer
-          systemd-analyze calendar --iterations=4 '*-*-* *:00/5:00 UTC'
+          calendar=$(sed -n 's/^OnCalendar=//p' deploy/scumshot-status.timer)
+          LC_ALL=C systemd-analyze calendar --base-time='2026-11-18 23:58:00 UTC' --iterations=4 "$calendar" > "$RUNNER_TEMP/status-calendar.txt"
+          for minute in 00 05 10 15; do
+            grep -Fq "2026-11-19 00:$minute:00 UTC" "$RUNNER_TEMP/status-calendar.txt"
+          done
+          cat "$RUNNER_TEMP/status-calendar.txt"
