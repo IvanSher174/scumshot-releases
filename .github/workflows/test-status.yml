@@ -1,0 +1,33 @@
+name: Test status publisher
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/test-status.yml'
+      - 'deploy/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: node --test .github/scripts/publish-status.test.cjs
+      - name: Validate the independent timer without starting it
+        run: |
+          # Hosted runners keep Node in a toolcache; validate the deployment path too.
+          if ! test -x /usr/bin/node; then
+            sudo ln -s "$(command -v node)" /usr/bin/node
+          fi
+          test -x /usr/bin/node
+          systemd-analyze verify deploy/scumshot-status.service deploy/scumshot-status.timer
+          calendar=$(sed -n 's/^OnCalendar=//p' deploy/scumshot-status.timer)
+          LC_ALL=C systemd-analyze calendar --base-time='2026-11-18 23:58:00 UTC' --iterations=4 "$calendar" > "$RUNNER_TEMP/status-calendar.txt"
+          for minute in 00 05 10 15; do
+            grep -Fq "2026-11-19 00:$minute:00 UTC" "$RUNNER_TEMP/status-calendar.txt"
+          done
+          cat "$RUNNER_TEMP/status-calendar.txt"

@@ -1,7 +1,19 @@
 'use strict';
-// Runs on GitHub, never in the distributed launcher. Only an allowlisted summary
+// Runs on a trusted publisher host, never in the launcher. Only an allowlisted summary
 // is published. No API responses, player lists, tokens or private keys are logged.
 const crypto=require('node:crypto');
+const fs=require('node:fs');
+const path=require('node:path');
+function credentials(env=process.env){
+ const read=(name,fallback)=>env.CREDENTIALS_DIRECTORY?fs.readFileSync(path.join(env.CREDENTIALS_DIRECTORY,name),'utf8').trim():fallback;
+ return {token:read('warden-api-key',env.WARDEN_API_KEY),key:read('status-signing-key',env.STATUS_SIGNING_KEY),githubToken:read('github-token',env.GH_TOKEN)};
+}
+// Pinned SPKI from the shipped launcher's status-public.pem; rotation needs a matching client update.
+function signingKey(key,publicKey='MCowBQYDK2VwAyEAMGTPrQkGDckEv8Dqi5Bh3Ec3W86Xd79BArQL0kmKcQs='){
+ const privateKey=crypto.createPrivateKey(key);
+ if(crypto.createPublicKey(privateKey).export({format:'der',type:'spki'}).toString('base64')!==publicKey)throw Error('Status signing key does not match the launcher.');
+ return privateKey;
+}
 async function limitedJSON(response,limit=1024*1024){
  if(!response.ok||!response.body)throw Error('Remote service rejected the request.');
  const chunks=[];let size=0;
@@ -9,6 +21,7 @@ async function limitedJSON(response,limit=1024*1024){
  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 async function collect({token,key,server,request=fetch,now=Date.now}){
+ if(typeof server!=='string'||!server.trim())throw Error('Status server is not configured.');
  if(typeof token!=='string'||!/^wc_live_[\w-]{8,}$/.test(token))throw Error('WardenCore credential is not configured.');
  if(crypto.createHash('sha256').update(token).digest('hex')==='3209724323d7fde123e9ba60d562cfa005fce9e637492f67995d53a4d6b56156')throw Error('The exposed WardenCore key must be replaced before deployment.');
  const get=async route=>limitedJSON(await request('https://api.wardencore.ru/v1'+route,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(20000)}));
@@ -38,11 +51,12 @@ async function publish(envelope,{repo,token,request=fetch}){
  const prior=await api('/contents/server-status.json?ref=status','GET',undefined,true);
  await api('/contents/server-status.json','PUT',{message:'Refresh public server status',branch:'status',content:Buffer.from(JSON.stringify(envelope)+'\n').toString('base64'),...(prior?{sha:prior.sha}:{})});
 }
-module.exports={collect,publish};
+module.exports={collect,publish,credentials,signingKey};
 if(require.main===module){
  (async()=>{
-  const envelope=await collect({token:process.env.WARDEN_API_KEY,key:process.env.STATUS_SIGNING_KEY,server:process.env.STATUS_SERVER});
-  await publish(envelope,{repo:process.env.GITHUB_REPOSITORY,token:process.env.GH_TOKEN});
+  const {token,key,githubToken}=credentials();
+  const envelope=await collect({token,key:signingKey(key),server:process.env.STATUS_SERVER});
+  await publish(envelope,{repo:process.env.GITHUB_REPOSITORY,token:githubToken});
   console.log('Published a signed server status summary. No credentials or player records were published.');
  })().catch(()=>{console.error('Server status publication failed. Check credentials, read permissions and service availability.');process.exitCode=1;});
 }

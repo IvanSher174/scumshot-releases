@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh SCUMshot status every five minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/5:00 UTC
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=yes
+
+[Install]
+WantedBy=timers.target
